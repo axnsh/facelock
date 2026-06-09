@@ -163,8 +163,11 @@ export default function Home() {
     "failure"
   >("landing");
   const [registeredHash, setRegisteredHash] = useState<string | null>(null);
+  const [latestScreenshot, setLatestScreenshot] = useState<string | null>(null);
+  const [latestPredictions, setLatestPredictions] = useState<any[]>([]);
   const [failureMessage, setFailureMessage] = useState<string>("Access Denied");
   const [failureVariant, setFailureVariant] = useState<"error" | "warning">("error");
+  const [failureRetryScreen, setFailureRetryScreen] = useState<"register" | "verify">("verify");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -182,21 +185,40 @@ export default function Home() {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
+  const resetFaceMemory = () => {
+    localStorage.removeItem(FACE_HASH_STORAGE_KEY);
+    setRegisteredHash(null);
+    setLatestScreenshot(null);
+    setLatestPredictions([]);
+    setFailureMessage("Access Denied");
+    setFailureVariant("error");
+    setFailureRetryScreen("register");
+  };
+
   const handleRegister = async () => {
     const screenshot = webcamRef.current?.getScreenshot();
     if (!screenshot) {
+      setFailureVariant("warning");
+      setFailureMessage(
+        "No face detected. Please make sure your face is visible in the camera shot."
+      );
+      setFailureRetryScreen("register");
       setScreen("failure");
       return;
     }
 
+    setLatestScreenshot(screenshot);
+
     try {
       const predictions = await detectFaces(screenshot);
+      setLatestPredictions(predictions);
       if (predictions.length === 0) {
         console.warn("No face detected during registration");
         setFailureVariant("warning");
         setFailureMessage(
           "No face detected. Please make sure your face is visible in the camera shot."
         );
+        setFailureRetryScreen("register");
         setScreen("failure");
         return;
       }
@@ -204,33 +226,51 @@ export default function Home() {
       const hash = await getImageHash(screenshot);
       localStorage.setItem(FACE_HASH_STORAGE_KEY, hash);
       setRegisteredHash(hash);
+      setFailureVariant("error");
+      setFailureMessage("Access Denied");
+      setFailureRetryScreen("verify");
       setScreen("verify");
     } catch (error) {
       console.error("Registration failed", error);
+      setFailureVariant("error");
+      setFailureMessage("Access Denied");
+      setFailureRetryScreen("register");
       setScreen("failure");
     }
   };
 
   const handleVerify = async () => {
     if (!registeredHash) {
+      setFailureVariant("error");
+      setFailureMessage("Access Denied");
+      setFailureRetryScreen("register");
       setScreen("failure");
       return;
     }
 
     const screenshot = webcamRef.current?.getScreenshot();
     if (!screenshot) {
+      setFailureVariant("warning");
+      setFailureMessage(
+        "No face detected. Please make sure your face is visible in the camera shot."
+      );
+      setFailureRetryScreen("verify");
       setScreen("failure");
       return;
     }
 
+    setLatestScreenshot(screenshot);
+
     try {
       const predictions = await detectFaces(screenshot);
+      setLatestPredictions(predictions);
       if (predictions.length === 0) {
         console.warn("No face detected during verification");
         setFailureVariant("warning");
         setFailureMessage(
           "No face detected. Please make sure your face is visible in the camera shot."
         );
+        setFailureRetryScreen("verify");
         setScreen("failure");
         return;
       }
@@ -242,12 +282,14 @@ export default function Home() {
       } else {
         setFailureVariant("error");
         setFailureMessage("Access Denied");
+        setFailureRetryScreen("verify");
         setScreen("failure");
       }
     } catch (error) {
       console.error("Verification failed", error);
       setFailureVariant("error");
       setFailureMessage("Access Denied");
+      setFailureRetryScreen("verify");
       setScreen("failure");
     }
   };
@@ -255,12 +297,11 @@ export default function Home() {
   const handleTryAgain = () => {
     setFailureVariant("error");
     setFailureMessage("Access Denied");
-    setScreen("verify");
+    setScreen(failureRetryScreen);
   };
 
   const handleGoBack = () => {
-    localStorage.removeItem(FACE_HASH_STORAGE_KEY);
-    setRegisteredHash(null);
+    resetFaceMemory();
     setScreen("landing");
   };
 
@@ -273,7 +314,12 @@ export default function Home() {
       <Navbar theme={theme} onToggleTheme={handleToggleTheme} />
 
       {screen === "landing" && (
-        <Landing onStart={() => setScreen("register")} />
+        <Landing
+          onStart={() => {
+            resetFaceMemory();
+            setScreen("register");
+          }}
+        />
       )}
 
       {screen === "register" && (
