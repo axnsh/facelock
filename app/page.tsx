@@ -168,6 +168,7 @@ export default function Home() {
   const [failureMessage, setFailureMessage] = useState<string>("Access Denied");
   const [failureVariant, setFailureVariant] = useState<"error" | "warning">("error");
   const [failureRetryScreen, setFailureRetryScreen] = useState<"register" | "verify">("verify");
+  const failureRetryScreenRef = useRef<"register" | "verify">("verify");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -185,6 +186,11 @@ export default function Home() {
     localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
+  const updateFailureRetryScreen = (screen: "register" | "verify") => {
+    setFailureRetryScreen(screen);
+    failureRetryScreenRef.current = screen;
+  };
+
   const resetFaceMemory = () => {
     localStorage.removeItem(FACE_HASH_STORAGE_KEY);
     setRegisteredHash(null);
@@ -192,7 +198,7 @@ export default function Home() {
     setLatestPredictions([]);
     setFailureMessage("Access Denied");
     setFailureVariant("error");
-    setFailureRetryScreen("register");
+    updateFailureRetryScreen("register");
   };
 
   const handleRegister = async () => {
@@ -202,7 +208,7 @@ export default function Home() {
       setFailureMessage(
         "No face detected. Please make sure your face is visible in the camera shot."
       );
-      setFailureRetryScreen("register");
+      updateFailureRetryScreen("register");
       setScreen("failure");
       return;
     }
@@ -218,7 +224,7 @@ export default function Home() {
         setFailureMessage(
           "No face detected. Please make sure your face is visible in the camera shot."
         );
-        setFailureRetryScreen("register");
+        updateFailureRetryScreen("register");
         setScreen("failure");
         return;
       }
@@ -228,13 +234,13 @@ export default function Home() {
       setRegisteredHash(hash);
       setFailureVariant("error");
       setFailureMessage("Access Denied");
-      setFailureRetryScreen("verify");
+      updateFailureRetryScreen("verify");
       setScreen("verify");
     } catch (error) {
       console.error("Registration failed", error);
       setFailureVariant("error");
       setFailureMessage("Access Denied");
-      setFailureRetryScreen("register");
+      updateFailureRetryScreen("register");
       setScreen("failure");
     }
   };
@@ -243,7 +249,7 @@ export default function Home() {
     if (!registeredHash) {
       setFailureVariant("error");
       setFailureMessage("Access Denied");
-      setFailureRetryScreen("register");
+      updateFailureRetryScreen("register");
       setScreen("failure");
       return;
     }
@@ -254,7 +260,7 @@ export default function Home() {
       setFailureMessage(
         "No face detected. Please make sure your face is visible in the camera shot."
       );
-      setFailureRetryScreen("verify");
+      updateFailureRetryScreen("verify");
       setScreen("failure");
       return;
     }
@@ -270,7 +276,7 @@ export default function Home() {
         setFailureMessage(
           "No face detected. Please make sure your face is visible in the camera shot."
         );
-        setFailureRetryScreen("verify");
+        updateFailureRetryScreen("verify");
         setScreen("failure");
         return;
       }
@@ -282,14 +288,14 @@ export default function Home() {
       } else {
         setFailureVariant("error");
         setFailureMessage("Access Denied");
-        setFailureRetryScreen("verify");
+        updateFailureRetryScreen("verify");
         setScreen("failure");
       }
     } catch (error) {
       console.error("Verification failed", error);
       setFailureVariant("error");
       setFailureMessage("Access Denied");
-      setFailureRetryScreen("verify");
+      updateFailureRetryScreen("verify");
       setScreen("failure");
     }
   };
@@ -297,7 +303,7 @@ export default function Home() {
   const handleTryAgain = () => {
     setFailureVariant("error");
     setFailureMessage("Access Denied");
-    setScreen(failureRetryScreen);
+    setScreen(failureRetryScreenRef.current);
   };
 
   const handleGoBack = () => {
