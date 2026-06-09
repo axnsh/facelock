@@ -13,7 +13,9 @@ import Verify from "@/components/Verify";
 const FACE_HASH_STORAGE_KEY = "faceLockRegistered";
 const THEME_STORAGE_KEY = "faceLockTheme";
 const HASH_SIZE = 16;
-const MATCH_THRESHOLD = 40;
+const MATCH_THRESHOLD = 70;
+
+let faceModel: any | null = null;
 
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -23,6 +25,15 @@ function loadImage(src: string) {
     image.onerror = reject;
     image.src = src;
   });
+}
+
+async function getFaceModel() {
+  if (faceModel) return faceModel;
+
+  const blazeface = await import("@tensorflow-models/blazeface");
+  await import("@tensorflow/tfjs");
+  faceModel = await blazeface.load();
+  return faceModel;
 }
 
 async function getImageHash(dataUrl: string) {
@@ -84,14 +95,12 @@ async function detectFaces(dataUrl: string) {
 
   context.drawImage(image, 0, 0);
 
-  if (typeof window !== "undefined" && "FaceDetector" in window) {
-    try {
-      const detector = new (window as any).FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-      const faces = await detector.detect(canvas);
-      return faces.length > 0;
-    } catch {
-      // Fall back to heuristic if detection fails.
-    }
+  try {
+    const model = await getFaceModel();
+    const predictions = await model.estimateFaces(canvas, false);
+    return predictions;
+  } catch (error) {
+    console.warn("Face detection failed via Blazeface, falling back to heuristic", error);
   }
 
   const imageData = context.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -131,7 +140,7 @@ async function detectFaces(dataUrl: string) {
     }
   }
 
-  return edgeCount / total > 0.02;
+  return edgeCount / total > 0.02 ? [{}] : [];
 }
 
 function compareHashes(hashA: string, hashB: string) {
@@ -154,6 +163,8 @@ export default function Home() {
     "failure"
   >("landing");
   const [registeredHash, setRegisteredHash] = useState<string | null>(null);
+  const [failureMessage, setFailureMessage] = useState<string>("Access Denied");
+  const [failureVariant, setFailureVariant] = useState<"error" | "warning">("error");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -179,9 +190,13 @@ export default function Home() {
     }
 
     try {
-      const hasFace = await detectFaces(screenshot);
-      if (!hasFace) {
+      const predictions = await detectFaces(screenshot);
+      if (predictions.length === 0) {
         console.warn("No face detected during registration");
+        setFailureVariant("warning");
+        setFailureMessage(
+          "No face detected. Please make sure your face is visible in the camera shot."
+        );
         setScreen("failure");
         return;
       }
@@ -209,9 +224,13 @@ export default function Home() {
     }
 
     try {
-      const hasFace = await detectFaces(screenshot);
-      if (!hasFace) {
+      const predictions = await detectFaces(screenshot);
+      if (predictions.length === 0) {
         console.warn("No face detected during verification");
+        setFailureVariant("warning");
+        setFailureMessage(
+          "No face detected. Please make sure your face is visible in the camera shot."
+        );
         setScreen("failure");
         return;
       }
@@ -221,19 +240,27 @@ export default function Home() {
       if (difference <= MATCH_THRESHOLD) {
         setScreen("success");
       } else {
+        setFailureVariant("error");
+        setFailureMessage("Access Denied");
         setScreen("failure");
       }
     } catch (error) {
       console.error("Verification failed", error);
+      setFailureVariant("error");
+      setFailureMessage("Access Denied");
       setScreen("failure");
     }
   };
 
   const handleTryAgain = () => {
+    setFailureVariant("error");
+    setFailureMessage("Access Denied");
     setScreen("verify");
   };
 
   const handleGoBack = () => {
+    localStorage.removeItem(FACE_HASH_STORAGE_KEY);
+    setRegisteredHash(null);
     setScreen("landing");
   };
 
@@ -261,7 +288,12 @@ export default function Home() {
         <Success onTryAgain={handleTryAgain} onGoBack={handleGoBack} />
       )}
       {screen === "failure" && (
-        <Failure onTryAgain={handleTryAgain} onGoBack={handleGoBack} />
+        <Failure
+          onTryAgain={handleTryAgain}
+          onGoBack={handleGoBack}
+          message={failureMessage}
+          variant={failureVariant}
+        />
       )}
 
       <Footer />
